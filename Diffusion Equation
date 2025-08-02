@@ -1,0 +1,31 @@
+from ngsolve import *
+from ngsolve.webgui import Draw
+from netgen.occ import unit_square
+from time import sleep
+
+mesh = Mesh(unit_square.GenerateMesh(maxh=0.1))
+
+dt = 0.01
+Nt = 100
+u0 = exp(-50*( (x-0.5)**2 + (y-0.5)**2))
+
+fes = H1(mesh, order = 3)
+u,v = fes.TnT()
+m = BilinearForm(u*v*dx).Assemble() 
+a = BilinearForm(grad(u)*grad(v)*dx).Assemble()
+mstar = BilinearForm(u*v*dx + dt*grad(u)*grad(v)*dx).Assemble()
+
+inv = mstar.mat.Inverse() # Get the inverse of the mstar matrix
+
+f = LinearForm(fes).Assemble()
+
+gf = GridFunction(fes)
+gf.Set(u0)
+Draw(gf, mesh, deformation = True, animate = True)
+sleep(0.2)
+
+for i in range(Nt):
+    ds = inv * (f.vec - dt * a.mat * gf.vec) 
+    gf.vec.data += ds #updates solution
+    #sleep(0.1)
+Draw(gf, mesh, deformation = True, animate = True)
