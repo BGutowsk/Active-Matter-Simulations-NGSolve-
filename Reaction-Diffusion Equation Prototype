@@ -1,0 +1,97 @@
+from ngsolve import *
+from netgen.geom2d import unit_square
+from ngsolve.webgui import Draw
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.ndimage import laplace
+
+mesh = Mesh(unit_square.GenerateMesh(maxh=0.05))
+fes = {"u": L2(mesh, order = 1), "v": L2(mesh, order = 1), "w": H1(mesh, order = 2)}
+
+u_trial = fes["u"].TrialFunction()
+v_trial = fes["v"].TrialFunction()
+w_trial = fes["w"].TrialFunction()
+
+u_test = fes["u"].TestFunction()
+v_test = fes["v"].TestFunction()
+w_test = fes["w"].TestFunction()
+
+u = GridFunction(fes["u"])
+v = GridFunction(fes["v"])
+w = GridFunction(fes["w"])
+
+a = 1.0
+b = 3.5
+K = 0.15
+eps = 6.0
+
+def f(u, v, a=1.0, b=3.5):
+    return a - (1 + b) * u + u**2 * v
+
+def g(u, v, b=3.5):
+    return b * u - u**2 * v
+
+bilinearforms = {}
+bilinearforms["u"] = BilinearForm(u_trial * u_test * dx).Assemble()  # mass form for u
+bilinearforms["v"] = BilinearForm(v_trial * v_test * dx).Assemble()
+bilinearforms["w"] = BilinearForm(w_trial * w_test * dx).Assemble()
+
+print(type(mesh.vertices))
+lap_w = BilinearForm(grad(w_trial) * grad(w_test) * dx).Assemble()
+
+dt = 0.02
+Tfinal = 200.0
+t = 0.0
+
+import random
+for gf in (u, v, w):
+    gf.Set(0.0)
+  
+
+for vertex in mesh.vertices:
+    x, y = vertex.point[0], vertex.point[1]
+    if (x - 0.5)**2 + (y - 0.5)**2 < 0.1**2:
+        u.vec[vertex.nr] += 0.1 * random.random() #random perturbations
+
+while t < Tfinal:
+    
+    fu = f(u, v)
+    gv = g(u, v)
+    wu = w
+
+    ru = GridFunction(fes["u"])
+    rv = GridFunction(fes["v"])
+    rw = GridFunction(fes["w"])
+    ru.Set(fu + K*(wu - u))
+    rv.Set(gv)
+    rw.Set(eps*(u - w))
+    rw.vec.data += dt * lap_w.mat * w.vec
+
+    u.vec.data += dt * ru.vec
+    v.vec.data += dt * rv.vec
+    w.vec.data += dt * rw.vec #w only diffusive one
+
+    t += dt
+
+u_vec = np.array(u.vec.data)
+v_vec = np.array(v.vec.data)
+
+phi = np.arctan2(v_vec - 2.0, u_vec - 3.0)
+
+R = np.zeros_like(phi)
+print("R is")
+print(R)
+result = np.vstack((u_vec, v_vec))
+print("result is")
+print(result)
+
+Draw(u, mesh)
+
+Draw(v, mesh)
+
+Draw(w, mesh)
+
+plt.imshow(result, cmap='jet')  #I don't think my plot here and my webgui drawings are correct.
+plt.colorbar()
+plt.show()
+
